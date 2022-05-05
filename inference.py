@@ -1,30 +1,37 @@
+'''
+本文件是整个模型的入口。请从后往前浏览，找到main，那里是程序入口。
+'''
+# 下面的是本地编写的代码
 from seg import U2NETP
 from GeoTr import GeoTr
 from IllTr import IllTr
 from inference_ill import rec_ill
 
+# 下面的是导入的包
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import skimage.io as io
-import numpy as np
-import cv2
-import glob
+import numpy as np      # NunPy
+import cv2              # OpenCV
+# 下面这个glob模块用来查找文件，似乎没用过，我把它注释起来了
+# import glob
 import os
-from PIL import Image
-import argparse
+from PIL import Image   # 用于进行图片的读取、保存等操作。对图片本身的运算则不使用这个库
+import argparse         # 用于解析命令行参数
+# 关掉程序的警告信息
 import warnings
 warnings.filterwarnings('ignore')
 
-
+# 几何校正的封装类，注意这里的几何校正也包括识别文档边界的部分
 class GeoTr_Seg(nn.Module):
     def __init__(self):
         super(GeoTr_Seg, self).__init__()
-        self.msk = U2NETP(3, 1)
-        self.GeoTr = GeoTr(num_attn_layers=6)
+        self.msk = U2NETP(3, 1)         # 识别文档边界。这里实例化了U2NETP类。该类的定义见seg.py
+        self.GeoTr = GeoTr(num_attn_layers=6)   # 几何矫正。GeoTr类的定义见GeoTr.py
         
     def forward(self, x):
-        msk, _1,_2,_3,_4,_5,_6 = self.msk(x)
+        msk, _1,_2,_3,_4,_5,_6 = self.msk(x)    # _1到_6都是无用值，直接丢弃。只需要msk
         msk = (msk > 0.5).float()
         x = msk * x
 
@@ -33,13 +40,13 @@ class GeoTr_Seg(nn.Module):
         
         return bm
         
-
-def reload_model(model, path=""):
-    if not bool(path):
+# 加载预训练模型，至于加载的是几何还是光照，由参数model决定
+def reload_model(model, path=""):   # path默认值为空，表示没有预训练
+    if not bool(path):      # path为空时原封不动地返回model
         return model
-    else:
+    else:                   # 否则，加载模型
         model_dict = model.state_dict()
-        pretrained_dict = torch.load(path, map_location='cpu')
+        pretrained_dict = torch.load(path, map_location='cuda:0')
         print(len(pretrained_dict.keys()))
         pretrained_dict = {k[7:]: v for k, v in pretrained_dict.items() if k[7:] in model_dict}
         print(len(pretrained_dict.keys()))
@@ -48,13 +55,13 @@ def reload_model(model, path=""):
 
         return model
         
-
+# 加载分割文档边界的预训练模型
 def reload_segmodel(model, path=""):
     if not bool(path):
         return model
     else:
         model_dict = model.state_dict()
-        pretrained_dict = torch.load(path, map_location='cpu')
+        pretrained_dict = torch.load(path, map_location='cuda:0')
         print(len(pretrained_dict.keys()))
         pretrained_dict = {k[6:]: v for k, v in pretrained_dict.items() if k[6:] in model_dict}
         print(len(pretrained_dict.keys()))
@@ -63,11 +70,11 @@ def reload_segmodel(model, path=""):
 
         return model
         
-
+# 控制整个修复过程的函数
 def rec(opt):
     # 下面这行是作者注释起来的，可以看到他使用的torch版本是1.5.1
     # print(torch.__version__) # 1.5.1
-    img_list = os.listdir(opt.distorted_path)  # 扭曲图片的列表(list)
+    img_list = os.listdir(opt.distorted_path)  # 扭曲文档图片的列表(list)
 
     # 下面两个if是判断输出文件夹是否存在，若不存在则创建
     if not os.path.exists(opt.gsave_path):  # create save path
@@ -75,17 +82,18 @@ def rec(opt):
     if not os.path.exists(opt.isave_path):  # create save path
         os.mkdir(opt.isave_path)
     
-    GeoTr_Seg_model = GeoTr_Seg()
-    # reload segmentation model
+    GeoTr_Seg_model = GeoTr_Seg().cuda()    # cuda()表示把数据调入GPU运算，下同。
+    # 加载文档边界分割模型
     reload_segmodel(GeoTr_Seg_model.msk, opt.Seg_path)
-    # reload geometric unwarping model
+    # 加载几何矫正预训练模型
     reload_model(GeoTr_Seg_model.GeoTr, opt.GeoTr_path)
     
-    IllTr_model = IllTr()
-    # reload illumination rectification model
+    IllTr_model = IllTr().cuda()
+    # 加载光照修复预训练模型
     reload_model(IllTr_model, opt.IllTr_path)
     
     # To eval mode
+    # 不启用 Batch Normalization 和 Dropout，注意和python内置的eval不是同一个东西
     GeoTr_Seg_model.eval()
     IllTr_model.eval()
   
@@ -102,16 +110,24 @@ def rec(opt):
         Image对象根据其是彩图或灰度图等会有不同的mode属性
         这里的mode = 'RGB'。每个像素有3个通道值 因此张量的第三维有3个元素
         有关:3的含义 我猜测是考虑到RGBA模式的4通道情况，这里直接砍掉(可能的)第4维
+        im: image的缩写。
         '''
         im_ori = np.array(Image.open(img_path))[:, :, :3] / 255.    # 255.的.是必要的，用于进行浮点除法
-        h, w, _ = im_ori.shape  # h w 就是上面提到的H W，_应该是直接扔掉了
-        im = cv2.resize(im_ori, (288, 288))
+        h, w, _ = im_ori.shape                  # h w 就是上面提到的H W，_应该是直接扔掉了
+        im = cv2.resize(im_ori, (288, 288))     # 这一步将输入图像无条件压缩至288 * 288。这里的im是cv2.Mat类型。
+        # 有关numpy.transpose()，见https://www.cnblogs.com/caizhou520/p/11227986.html
+        # 下式将 x, y, z 的顺序调整为 z, x, y (目的是？)
         im = im.transpose(2, 0, 1)
+        '''
+        下面这步将numpy数组格式的im转成torch内置的Tensor格式。
+        unsqueeze()用于升维。在这里，它在整个张量外层添加一层括号。
+        float()指示torch将目标张量的类型设为torch.float32 (32位浮点数)
+        '''
         im = torch.from_numpy(im).float().unsqueeze(0)
         
         with torch.no_grad():
-            # geometric unwarping
-            bm = GeoTr_Seg_model(im)
+            # 几何矫正
+            bm = GeoTr_Seg_model(im.cuda())
             bm = bm.cpu()
             bm0 = cv2.resize(bm[0, 0].numpy(), (w, h))  # x flow
             bm1 = cv2.resize(bm[0, 1].numpy(), (w, h))  # y flow
@@ -121,20 +137,20 @@ def rec(opt):
             
             out = F.grid_sample(torch.from_numpy(im_ori).permute(2,0,1).unsqueeze(0).float(), lbl, align_corners=True)
             img_geo = ((out[0]*255).permute(1, 2, 0).numpy()).astype(np.uint8)
-            io.imsave(opt.gsave_path + name + '_geo' + '.png', img_geo)  # save
+            io.imsave(opt.gsave_path + name + '_geo' + '.png', img_geo)  # 保存，此处的io指Image.io
             
-            # illumination rectification
-            if opt.ill_rec:
+            # 光照修复
+            if opt.ill_rec:     # 只有在参数中指定进行光照修复时，才执行下面的代码
                 ill_savep = opt.isave_path + name + '_ill' + '.png'
-                rec_ill(IllTr_model, img_geo, saveRecPath=ill_savep)
+                rec_ill(IllTr_model, img_geo, saveRecPath=ill_savep)    # rec_ill函数，见inference_ill.py
         
         print('Done: ', img_path)
 
 # 程序总入口
 def main():
-    # 下面parser开头的这几行是参数解析，所有参数都给出了默认值。
+    # 下面parser开头的这几行是命令行参数解析，所有参数都给出了默认值。
     parser = argparse.ArgumentParser() 
-    parser.add_argument('--distorted_path',  default='./distorted/')   # 存放扭曲图片的源文件夹
+    parser.add_argument('--distorted_path',  default='./distorted/')    # 存放扭曲图片的源文件夹
     parser.add_argument('--gsave_path',  default='./geo_rec/')          # 存放几何矫正输出图片的文件夹
     parser.add_argument('--isave_path',  default='./ill_rec/')          # 存放光照修复输出图片的文件夹
     parser.add_argument('--Seg_path',  default='./model_pretrained/seg.pth')        # 存放

@@ -1,11 +1,9 @@
-import torch
+# 下面这行没有用到
+# import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-'''
-残余块？
-该类为torch.nn的子类
-'''
+# 残差块
 class ResidualBlock(nn.Module):
     def __init__(self, in_planes, planes, norm_fn='group', stride=1):
         super(ResidualBlock, self).__init__()
@@ -58,10 +56,7 @@ class ResidualBlock(nn.Module):
 
         return self.relu(x+y)
 
-'''
-基础编码器？
-该类为torch.nn的子类。
-'''
+
 class BasicEncoder(nn.Module):
     def __init__(self, output_dim=128, norm_fn='batch'):
         super(BasicEncoder, self).__init__()

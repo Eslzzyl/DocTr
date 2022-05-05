@@ -1,6 +1,10 @@
+'''
+本文件是文档边缘检测模型的实现部分
+'''
 import torch
 import torch.nn as nn
-from torchvision import models
+# torchvision.models在这个文件似乎没有用到，我把它注释起来
+# from torchvision import models
 import torch.nn.functional as F
 import numpy as np
 
@@ -448,6 +452,7 @@ class U2NET(nn.Module):
 
 
 ### U^2-Net small ###
+# 上面的注释是作者加的。即论文中提到的用于识别文档边界的U2 Net。small的意思可能是低配版。
 class U2NETP(nn.Module):
 
     def __init__(self, in_ch=3, out_ch=1):
@@ -557,9 +562,10 @@ def get_parameter_number(net):
     trainable_num = sum(p.numel() for p in net.parameters() if p.requires_grad)
     return {'Total': total_num, 'Trainable': trainable_num}
 
-
+# 下面的代码暗示这个文件可以直接执行。但看样子它并不执行实际操作，而是输出一些网络的参数。
 if __name__ == '__main__':
     net = U2NET(4, 1).cuda()
+    # 下面这行的代码是作者加的，他居然用了中文！
     print(get_parameter_number(net))  # 69090500 加attention后69442032
     with torch.no_grad():
         inputs = torch.zeros(1, 3, 256, 256).cuda()

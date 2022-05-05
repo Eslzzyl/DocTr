@@ -1,8 +1,12 @@
+'''
+本文件是几何校正模型的实现部分。
+'''
 from extractor import BasicEncoder
 from position_encoding import build_position_encoding
 
-import argparse
-import numpy as np
+# 下面两行没有用到，我把它注释起来
+# import argparse
+# import numpy as np
 import torch
 from torch import nn, Tensor
 import torch.nn.functional as F

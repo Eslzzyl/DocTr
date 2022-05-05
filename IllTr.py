@@ -1,6 +1,10 @@
+'''
+本文件是光照修复模型的实现部分。
+'''
 import torch
 import torch.nn as nn
-from torch.functional import Tensor
+# 下面这行似乎没有用到，我把它注释起来
+# from torch.functional import Tensor
 from torch.nn.modules.activation import Tanhshrink
 from timm.models.layers import trunc_normal_
 from functools import partial
@@ -208,7 +212,7 @@ class Tail(nn.Module):
         out = self.output(x)
         return out
 
-
+# 这里就是光照修复网络的主体了
 class IllTr_Net(nn.Module):
     """ Vision Transformer with support for patch or hybrid CNN input stage
     """
@@ -275,8 +279,9 @@ class IllTr_Net(nn.Module):
         x = self.acf(x)
         return x
 
-
+# 这个函数返回光照修复模型。上游的控制算法从这个函数取得模型
 def IllTr(**kwargs):
+    # 这里有一些预设的参数
     model = IllTr_Net(
         patch_size=4, depth=6, num_heads=8, ffn_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
         **kwargs)

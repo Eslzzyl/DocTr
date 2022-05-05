@@ -5,7 +5,8 @@ Various positional encodings for the transformer.
 import math
 import torch
 from torch import nn
-from typing import List
+# 下面这行没有用到，我把他注释起来。
+# from typing import List
 from typing import Optional
 from torch import Tensor
 
@@ -16,6 +17,7 @@ class NestedTensor(object):
         self.mask = mask
 
     def to(self, device):
+        # 下面这行可能会有一个警告，我不知道原因。noqa似乎是声明这行并没有问题。这是作者加的。
         # type: (Device) -> NestedTensor # noqa
         cast_tensor = self.tensors.to(device)
         mask = self.mask

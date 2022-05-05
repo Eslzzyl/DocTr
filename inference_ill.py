@@ -1,3 +1,6 @@
+'''
+本文件是光照修复模型的前端。用于把模型和控制算法对接起来。
+'''
 import cv2
 import numpy as np
 import torch
@@ -121,7 +124,13 @@ def postProcess(img):
 
     return img
 
-
+'''
+执行光照修复。
+参数解释：
+net         光照修复模型
+img         待修复图片
+saveRecPath 输出路径
+'''
 def rec_ill(net, img, saveRecPath):
 
     totalPatch, padH, padW = padCropImg(img)
@@ -130,5 +139,5 @@ def rec_ill(net, img, saveRecPath):
 
     resImg = composePatch(totalResults, padH, padW, img)
     #resImg = postProcess(resImg)
-    resImg = Image.fromarray(resImg)
-    resImg.save(saveRecPath)  
+    resImg = Image.fromarray(resImg)    # 将张量转为图片
+    resImg.save(saveRecPath)            # 保存图片到输出路径
