@@ -153,7 +153,7 @@ def main():
     parser.add_argument('--distorted_path',  default='./distorted/')    # 存放扭曲图片的源文件夹
     parser.add_argument('--gsave_path',  default='./geo_rec/')          # 存放几何矫正输出图片的文件夹
     parser.add_argument('--isave_path',  default='./ill_rec/')          # 存放光照修复输出图片的文件夹
-    parser.add_argument('--Seg_path',  default='./model_pretrained/seg.pth')        # 存放
+    parser.add_argument('--Seg_path',  default='./model_pretrained/seg.pth')        # 存放边界分割训练模型的位置
     parser.add_argument('--GeoTr_path',  default='./model_pretrained/geotr.pth')    # 几何训练模型的位置
     parser.add_argument('--IllTr_path',  default='./model_pretrained/illtr.pth')    # 光照训练模型的位置
     parser.add_argument('--ill_rec',  default=False)    # 是否进行光照修复，默认为否

@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import copy
 from typing import Optional
 
-
+# Attention Layer 之意
 class attnLayer(nn.Module):
     def __init__(self, d_model, nhead=8, dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False):
@@ -91,18 +91,18 @@ class attnLayer(nn.Module):
 def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
-
+# 获得激活函数
 def _get_activation_fn(activation):
     """Return an activation function given a string"""
     if activation == "relu":
-        return F.relu
+        return F.relu   # F: torch.nn.functional 的别名，下同
     if activation == "gelu":
         return F.gelu
     if activation == "glu":
         return F.glu
     raise RuntimeError(F"activation should be relu/gelu, not {activation}.")
 
-
+# Transformer 解码
 class TransDecoder(nn.Module):
     def __init__(self, num_attn_layers, hidden_dim=128):
         super(TransDecoder, self).__init__()
@@ -124,7 +124,7 @@ class TransDecoder(nn.Module):
 
         return query_embed
 
-
+# Transformer 编码
 class TransEncoder(nn.Module):
     def __init__(self, num_attn_layers, hidden_dim=128):
         super(TransEncoder, self).__init__()
