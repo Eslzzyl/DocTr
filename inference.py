@@ -27,7 +27,7 @@ warnings.filterwarnings('ignore')
 class GeoTr_Seg(nn.Module):
     def __init__(self):
         super(GeoTr_Seg, self).__init__()
-        self.msk = U2NETP(3, 1)         # 识别文档边界。这里实例化了U2NETP类。该类的定义见seg.py
+        self.msk = U2NETP(3, 1)                 # 识别文档边界。这里实例化了U2NETP类。该类的定义见seg.py
         self.GeoTr = GeoTr(num_attn_layers=6)   # 几何矫正。GeoTr类的定义见GeoTr.py
         
     def forward(self, x):
@@ -48,6 +48,7 @@ def reload_model(model, path=""):   # path默认值为空，表示没有预训�
         model_dict = model.state_dict()
         pretrained_dict = torch.load(path, map_location='cuda:0')
         print(len(pretrained_dict.keys()))
+        # 下面大括号中的是一个字典推导式，生成一个字典
         pretrained_dict = {k[7:]: v for k, v in pretrained_dict.items() if k[7:] in model_dict}
         print(len(pretrained_dict.keys()))
         model_dict.update(pretrained_dict)
@@ -55,7 +56,7 @@ def reload_model(model, path=""):   # path默认值为空，表示没有预训�
 
         return model
         
-# 加载分割文档边界的预训练模型
+# 加载分割文档边界的预训练模型，参考reload_model函数。
 def reload_segmodel(model, path=""):
     if not bool(path):
         return model
@@ -82,14 +83,16 @@ def rec(opt):
     if not os.path.exists(opt.isave_path):  # create save path
         os.mkdir(opt.isave_path)
     
+    # 加载文档边界分割模型和几何矫正模型。二者是捆绑在一起的。
     GeoTr_Seg_model = GeoTr_Seg().cuda()    # cuda()表示把数据调入GPU运算，下同。
-    # 加载文档边界分割模型
+    # 加载文档边界分割模型的参数
     reload_segmodel(GeoTr_Seg_model.msk, opt.Seg_path)
-    # 加载几何矫正预训练模型
+    # 加载几何矫正预训练模型的参数
     reload_model(GeoTr_Seg_model.GeoTr, opt.GeoTr_path)
     
+    # 加载光照修复模型
     IllTr_model = IllTr().cuda()
-    # 加载光照修复预训练模型
+    # 加载光照修复预训练模型的参数
     reload_model(IllTr_model, opt.IllTr_path)
     
     # To eval mode
@@ -113,31 +116,56 @@ def rec(opt):
         im: image的缩写。
         '''
         im_ori = np.array(Image.open(img_path))[:, :, :3] / 255.    # 255.的.是必要的，用于进行浮点除法
-        h, w, _ = im_ori.shape                  # h w 就是上面提到的H W，_应该是直接扔掉了
-        im = cv2.resize(im_ori, (288, 288))     # 这一步将输入图像无条件压缩至288 * 288。这里的im是cv2.Mat类型。
-        # 有关numpy.transpose()，见https://www.cnblogs.com/caizhou520/p/11227986.html
-        # 下式将 x, y, z 的顺序调整为 z, x, y (目的是？)
-        im = im.transpose(2, 0, 1)
+        h, w, _ = im_ori.shape                  # h w 就是上面提到的H W，而_应该是直接扔掉了
         '''
-        下面这步将numpy数组格式的im转成torch内置的Tensor格式。
+        下面一步将输入图像无条件压缩至288 * 288。这里的im是cv2.Mat类型。
+        见原论文3.1节：
+        given an image I_D, we first downsample it and get the image I_d, where H_0 = W_0 = 288
+        and C_0 = 3 is the number of RGB channels.
+        '''
+        im = cv2.resize(im_ori, (288, 288))     # im 现在是 288 * 288 * 3
+        # 有关numpy.transpose()，见 https://www.cnblogs.com/caizhou520/p/11227986.html
+        # 下式将 x, y, z 的顺序调整为 z, x, y (目的是？)
+        im = im.transpose(2, 0, 1)              # im 现在是 3 * 288 * 288
+        '''
+        下面这步将numpy数组格式的im转成torch内置的Tensor格式。cv2.Mat似乎可以直接转np.ndarray ?
         unsqueeze()用于升维。在这里，它在整个张量外层添加一层括号。
         float()指示torch将目标张量的类型设为torch.float32 (32位浮点数)
         '''
-        im = torch.from_numpy(im).float().unsqueeze(0)
+        im = torch.from_numpy(im).float().unsqueeze(0)  # im 现在是 1 * 3 * 288 * 288
         
+        '''
+        下面的with torch.no_grad()是十分常见的写法。
+        该代码段中Tensor的计算都不会进行自动求导，节省了显存。
+        '''
         with torch.no_grad():
-            # 几何矫正
+            # 边界分割和几何矫正
             bm = GeoTr_Seg_model(im.cuda())
-            bm = bm.cpu()
+
+            bm = bm.cpu()   # 剩下的后处理在 CPU 进行
             bm0 = cv2.resize(bm[0, 0].numpy(), (w, h))  # x flow
             bm1 = cv2.resize(bm[0, 1].numpy(), (w, h))  # y flow
             bm0 = cv2.blur(bm0, (3, 3))
             bm1 = cv2.blur(bm1, (3, 3))
             lbl = torch.from_numpy(np.stack([bm0, bm1], axis=2)).unsqueeze(0)  # h * w * 2
             
+            '''
+            下面这步就是论文3.1节提到的双线性插值
+            F: import torch.nn.functional as F
+            im_ori即original image之意，表示原始的图像，但实际上也是除以了255，并且砍掉了(可能的)第4维。
+            permute: 类似于transpose，交换Tensor的几个维度的顺序。
+            align_corners: 不太懂。有篇文章 https://zhuanlan.zhihu.com/p/87572724
+            '''
             out = F.grid_sample(torch.from_numpy(im_ori).permute(2,0,1).unsqueeze(0).float(), lbl, align_corners=True)
+            '''
+            out[0]表示取out的第一个维度，因为图片在预处理中已经变成了 1 * 3 * 288 * 288 的形式。
+            原先预处理时除以的255现在要乘回来。
+            permute: 同上。此处将out[0]的第1个维度放到第3个维度。
+            ((out[0]*255).permute(1, 2, 0).numpy())的结果是一个 H * W * 3 的np.ndarray。注意上面的双线性插值已经改变了H和W，它们不再是288了。
+            [:,:,::-1]是针对一个三维张量的索引，前两个维度保持不变，最后一个维度按倒序取值。
+            '''
             img_geo = ((out[0]*255).permute(1, 2, 0).numpy())[:,:,::-1].astype(np.uint8)
-            cv2.imwrite(opt.gsave_path + name + '_geo' + '.png', img_geo)  # 保存，此处的io指Image.io
+            cv2.imwrite(opt.gsave_path + name + '_geo' + '.png', img_geo)  # 保存图片
             
             # 光照修复
             if opt.ill_rec:     # 只有在参数中指定进行光照修复时，才执行下面的代码

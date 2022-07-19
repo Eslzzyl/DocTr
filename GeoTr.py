@@ -11,6 +11,8 @@ import torch
 from torch import nn, Tensor
 import torch.nn.functional as F
 import copy
+# typing 是 Python 3.5 引入的 builtin 模块
+# https://www.cnblogs.com/poloyy/p/15170297.html
 from typing import Optional
 
 # Attention Layer 之意
@@ -20,7 +22,7 @@ class attnLayer(nn.Module):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
         self.multihead_attn_list = nn.ModuleList([copy.deepcopy(nn.MultiheadAttention(d_model, nhead, dropout=dropout)) for i in range(2)])
-        # Implementation of Feedforward model
+        # 前向传播实现
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
         self.linear2 = nn.Linear(dim_feedforward, d_model)
@@ -37,7 +39,12 @@ class attnLayer(nn.Module):
         self.normalize_before = normalize_before
 
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
-        return tensor if pos is None else tensor + pos
+        # 下面这行是原代码，我将其改写成更清晰的写法
+        # return tensor if pos is None else tensor + pos
+        if pos is None:
+            return tensor
+        else:
+            return tensor + pos
 
     def forward_post(self, tgt, memory_list, tgt_mask=None, memory_mask=None,
                      tgt_key_padding_mask=None, memory_key_padding_mask=None,
