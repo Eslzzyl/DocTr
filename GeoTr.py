@@ -1,5 +1,6 @@
 '''
 本文件是几何校正模型的实现部分。
+本文件的入口GeoTr类在最底部。
 '''
 from extractor import BasicEncoder
 from position_encoding import build_position_encoding
@@ -15,14 +16,19 @@ import copy
 # https://www.cnblogs.com/poloyy/p/15170297.html
 from typing import Optional
 
-# Attention Layer 之意
+# Attention Layer 之意。用于Transformer的编码/解码。
 class attnLayer(nn.Module):
     def __init__(self, d_model, nhead=8, dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False):
         super().__init__()
+        '''
+        注意：下面定义的这些层并不是实际的传播顺序，而是供传播函数使用的。网络的实际传播顺序要看下面的forward函数。
+        '''
+        #torch.nn自带MultiheadAttention
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
-        self.multihead_attn_list = nn.ModuleList([copy.deepcopy(nn.MultiheadAttention(d_model, nhead, dropout=dropout)) for i in range(2)])
-        # 前向传播实现
+        self.multihead_attn_list = nn.ModuleList([copy.deepcopy(
+            nn.MultiheadAttention(d_model, nhead, dropout=dropout)) for i in range(2)])
+        
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
         self.linear2 = nn.Linear(dim_feedforward, d_model)
@@ -35,7 +41,7 @@ class attnLayer(nn.Module):
         self.dropout2_list = nn.ModuleList([copy.deepcopy(nn.Dropout(dropout)) for i in range(2)])
         self.dropout3 = nn.Dropout(dropout)
 
-        self.activation = _get_activation_fn(activation)
+        self.activation = _get_activation_fn(activation)    # activation默认为ReLU
         self.normalize_before = normalize_before
 
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
@@ -46,6 +52,9 @@ class attnLayer(nn.Module):
         else:
             return tensor + pos
 
+    '''
+    forward_pre和forward_post的区别在于normalize（self.norm1）的位置。前向传播时根据参数选择一个执行。见self.forward的逻辑。
+    '''
     def forward_post(self, tgt, memory_list, tgt_mask=None, memory_mask=None,
                      tgt_key_padding_mask=None, memory_key_padding_mask=None,
                      pos=None, memory_pos=None):
@@ -91,7 +100,8 @@ class attnLayer(nn.Module):
         if self.normalize_before:
             return self.forward_pre(tgt, memory_list, tgt_mask, memory_mask,
                                     tgt_key_padding_mask, memory_key_padding_mask, pos, memory_pos)
-        return self.forward_post(tgt, memory_list, tgt_mask, memory_mask,
+        else:
+            return self.forward_post(tgt, memory_list, tgt_mask, memory_mask,
                                  tgt_key_padding_mask, memory_key_padding_mask, pos, memory_pos)
 
 
@@ -142,7 +152,7 @@ class TransEncoder(nn.Module):
     def forward(self, imgf):
         pos = self.position_embedding(torch.ones(imgf.shape[0], imgf.shape[2], imgf.shape[3]).bool().cuda())  # torch.Size([1, 128, 36, 36])
         bs, c, h, w = imgf.shape
-        imgf = imgf.flatten(2).permute(2, 0, 1)  
+        imgf = imgf.flatten(2).permute(2, 0, 1)
         pos = pos.flatten(2).permute(2, 0, 1)
 
         for layer in self.layers:
@@ -190,22 +200,25 @@ def upflow8(flow, mode='bilinear'):
     new_size = (8 * flow.shape[2], 8 * flow.shape[3])
     return  8 * F.interpolate(flow, size=new_size, mode=mode, align_corners=True)
 
-
+'''
+GeoTr的封装，用到了前面的几个类
+'''
 class GeoTr(nn.Module):
     def __init__(self, num_attn_layers):
         super(GeoTr, self).__init__()
-        self.num_attn_layers = num_attn_layers
+        self.num_attn_layers = num_attn_layers  # Attention层的数量
 
-        self.hidden_dim = hdim = 256
+        self.hidden_dim = hdim = 256            # 隐藏层的维度
 
         self.fnet = BasicEncoder(output_dim=hdim, norm_fn='instance')
 
-        self.TransEncoder = TransEncoder(self.num_attn_layers, hidden_dim=hdim)
+        # Transformer编码器和解码器。定义都在上面。
+        self.TransEncoder = TransEncoder(self.num_attn_layers, hidden_dim=hdim)     # hdim=256，下同。
         self.TransDecoder = TransDecoder(self.num_attn_layers, hidden_dim=hdim)
         self.query_embed = nn.Embedding(1296, self.hidden_dim)
-        
+
         self.update_block = UpdateBlock(self.hidden_dim)
-                                    
+
     def initialize_flow(self, img):
         N, C, H, W = img.shape
         coodslar = coords_grid(N, H, W).to(img.device)
@@ -230,7 +243,7 @@ class GeoTr(nn.Module):
     def forward(self, image1):
         fmap = self.fnet(image1)
         fmap = torch.relu(fmap)
-        
+
         fmap = self.TransEncoder(fmap)
         fmap = self.TransDecoder(fmap, self.query_embed.weight)  
 

@@ -1,5 +1,6 @@
 '''
 本文件是文档边缘检测模型的实现部分
+本文件基本上直接照搬了https://github.com/xuebinqin/U-2-Net/blob/master/model/u2net.py
 '''
 import torch
 import torch.nn as nn
@@ -8,33 +9,35 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+'''
+这个类仅仅被完整版的U2-Net引用了。
+'''
+# class sobel_net(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         self.conv_opx = nn.Conv2d(1, 1, 3, bias=False)
+#         self.conv_opy = nn.Conv2d(1, 1, 3, bias=False)
+#         sobel_kernelx = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype='float32').reshape((1, 1, 3, 3))
+#         sobel_kernely = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype='float32').reshape((1, 1, 3, 3))
+#         self.conv_opx.weight.data = torch.from_numpy(sobel_kernelx)
+#         self.conv_opy.weight.data = torch.from_numpy(sobel_kernely)
 
-class sobel_net(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv_opx = nn.Conv2d(1, 1, 3, bias=False)
-        self.conv_opy = nn.Conv2d(1, 1, 3, bias=False)
-        sobel_kernelx = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype='float32').reshape((1, 1, 3, 3))
-        sobel_kernely = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype='float32').reshape((1, 1, 3, 3))
-        self.conv_opx.weight.data = torch.from_numpy(sobel_kernelx)
-        self.conv_opy.weight.data = torch.from_numpy(sobel_kernely)
+#         for p in self.parameters():
+#             p.requires_grad = False
 
-        for p in self.parameters():
-            p.requires_grad = False
+#     def forward(self, im):  # input rgb
+#         x = (0.299 * im[:, 0, :, :] + 0.587 * im[:, 1, :, :] + 0.114 * im[:, 2, :, :]).unsqueeze(1)  # rgb2gray
+#         gradx = self.conv_opx(x)
+#         grady = self.conv_opy(x)
 
-    def forward(self, im):  # input rgb
-        x = (0.299 * im[:, 0, :, :] + 0.587 * im[:, 1, :, :] + 0.114 * im[:, 2, :, :]).unsqueeze(1)  # rgb2gray
-        gradx = self.conv_opx(x)
-        grady = self.conv_opy(x)
+#         x = (gradx ** 2 + grady ** 2) ** 0.5
+#         x = (x - x.min()) / (x.max() - x.min())
+#         x = F.pad(x, (1, 1, 1, 1))
 
-        x = (gradx ** 2 + grady ** 2) ** 0.5
-        x = (x - x.min()) / (x.max() - x.min())
-        x = F.pad(x, (1, 1, 1, 1))
+#         x = torch.cat([im, x], dim=1)
+#         return x
 
-        x = torch.cat([im, x], dim=1)
-        return x
-
-
+# REBNCONV：ReLU BatchNorm Convolution之意
 class REBNCONV(nn.Module):
     def __init__(self, in_ch=3, out_ch=3, dirate=1):
         super(REBNCONV, self).__init__()
@@ -51,6 +54,7 @@ class REBNCONV(nn.Module):
 
 
 ## upsample tensor 'src' to have the same spatial size with tensor 'tar'
+# src: source; tar: target
 def _upsample_like(src, tar):
     src = F.interpolate(src, size=tar.shape[2:], mode='bilinear', align_corners=False)
 
@@ -343,116 +347,116 @@ class RSU4F(nn.Module):  # UNet04FRES(nn.Module):
 
         return hx1d + hxin
 
-
+#DocTr用的是小型U2-Net，因此下面的完整网络可以不用
 ##### U^2-Net ####
-class U2NET(nn.Module):
+# class U2NET(nn.Module):
 
-    def __init__(self, in_ch=3, out_ch=1):
-        super(U2NET, self).__init__()
-        self.edge = sobel_net()
+#     def __init__(self, in_ch=3, out_ch=1):
+#         super(U2NET, self).__init__()
+#         self.edge = sobel_net()
 
-        self.stage1 = RSU7(in_ch, 32, 64)
-        self.pool12 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
+#         self.stage1 = RSU7(in_ch, 32, 64)
+#         self.pool12 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
 
-        self.stage2 = RSU6(64, 32, 128)
-        self.pool23 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
+#         self.stage2 = RSU6(64, 32, 128)
+#         self.pool23 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
 
-        self.stage3 = RSU5(128, 64, 256)
-        self.pool34 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
+#         self.stage3 = RSU5(128, 64, 256)
+#         self.pool34 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
 
-        self.stage4 = RSU4(256, 128, 512)
-        self.pool45 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
+#         self.stage4 = RSU4(256, 128, 512)
+#         self.pool45 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
 
-        self.stage5 = RSU4F(512, 256, 512)
-        self.pool56 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
+#         self.stage5 = RSU4F(512, 256, 512)
+#         self.pool56 = nn.MaxPool2d(2, stride=2, ceil_mode=True)
 
-        self.stage6 = RSU4F(512, 256, 512)
+#         self.stage6 = RSU4F(512, 256, 512)
 
-        # decoder
-        self.stage5d = RSU4F(1024, 256, 512)
-        self.stage4d = RSU4(1024, 128, 256)
-        self.stage3d = RSU5(512, 64, 128)
-        self.stage2d = RSU6(256, 32, 64)
-        self.stage1d = RSU7(128, 16, 64)
+#         # decoder
+#         self.stage5d = RSU4F(1024, 256, 512)
+#         self.stage4d = RSU4(1024, 128, 256)
+#         self.stage3d = RSU5(512, 64, 128)
+#         self.stage2d = RSU6(256, 32, 64)
+#         self.stage1d = RSU7(128, 16, 64)
 
-        self.side1 = nn.Conv2d(64, out_ch, 3, padding=1)
-        self.side2 = nn.Conv2d(64, out_ch, 3, padding=1)
-        self.side3 = nn.Conv2d(128, out_ch, 3, padding=1)
-        self.side4 = nn.Conv2d(256, out_ch, 3, padding=1)
-        self.side5 = nn.Conv2d(512, out_ch, 3, padding=1)
-        self.side6 = nn.Conv2d(512, out_ch, 3, padding=1)
+#         self.side1 = nn.Conv2d(64, out_ch, 3, padding=1)
+#         self.side2 = nn.Conv2d(64, out_ch, 3, padding=1)
+#         self.side3 = nn.Conv2d(128, out_ch, 3, padding=1)
+#         self.side4 = nn.Conv2d(256, out_ch, 3, padding=1)
+#         self.side5 = nn.Conv2d(512, out_ch, 3, padding=1)
+#         self.side6 = nn.Conv2d(512, out_ch, 3, padding=1)
 
-        self.outconv = nn.Conv2d(6, out_ch, 1)
+#         self.outconv = nn.Conv2d(6, out_ch, 1)
 
-    def forward(self, x):
-        x = self.edge(x)
-        hx = x
+#     def forward(self, x):
+#         x = self.edge(x)
+#         hx = x
 
-        # stage 1
-        hx1 = self.stage1(hx)
-        hx = self.pool12(hx1)
+#         # stage 1
+#         hx1 = self.stage1(hx)
+#         hx = self.pool12(hx1)
 
-        # stage 2
-        hx2 = self.stage2(hx)
-        hx = self.pool23(hx2)
+#         # stage 2
+#         hx2 = self.stage2(hx)
+#         hx = self.pool23(hx2)
 
-        # stage 3
-        hx3 = self.stage3(hx)
-        hx = self.pool34(hx3)
+#         # stage 3
+#         hx3 = self.stage3(hx)
+#         hx = self.pool34(hx3)
 
-        # stage 4
-        hx4 = self.stage4(hx)
-        hx = self.pool45(hx4)
+#         # stage 4
+#         hx4 = self.stage4(hx)
+#         hx = self.pool45(hx4)
 
-        # stage 5
-        hx5 = self.stage5(hx)
-        hx = self.pool56(hx5)
+#         # stage 5
+#         hx5 = self.stage5(hx)
+#         hx = self.pool56(hx5)
 
-        # stage 6
-        hx6 = self.stage6(hx)
-        hx6up = _upsample_like(hx6, hx5)
+#         # stage 6
+#         hx6 = self.stage6(hx)
+#         hx6up = _upsample_like(hx6, hx5)
 
-        # -------------------- decoder --------------------
-        hx5d = self.stage5d(torch.cat((hx6up, hx5), 1))
-        hx5dup = _upsample_like(hx5d, hx4)
+#         # -------------------- decoder --------------------
+#         hx5d = self.stage5d(torch.cat((hx6up, hx5), 1))
+#         hx5dup = _upsample_like(hx5d, hx4)
 
-        hx4d = self.stage4d(torch.cat((hx5dup, hx4), 1))
-        hx4dup = _upsample_like(hx4d, hx3)
+#         hx4d = self.stage4d(torch.cat((hx5dup, hx4), 1))
+#         hx4dup = _upsample_like(hx4d, hx3)
 
-        hx3d = self.stage3d(torch.cat((hx4dup, hx3), 1))
-        hx3dup = _upsample_like(hx3d, hx2)
+#         hx3d = self.stage3d(torch.cat((hx4dup, hx3), 1))
+#         hx3dup = _upsample_like(hx3d, hx2)
 
-        hx2d = self.stage2d(torch.cat((hx3dup, hx2), 1))
-        hx2dup = _upsample_like(hx2d, hx1)
+#         hx2d = self.stage2d(torch.cat((hx3dup, hx2), 1))
+#         hx2dup = _upsample_like(hx2d, hx1)
 
-        hx1d = self.stage1d(torch.cat((hx2dup, hx1), 1))
+#         hx1d = self.stage1d(torch.cat((hx2dup, hx1), 1))
 
-        # side output
-        d1 = self.side1(hx1d)
+#         # side output
+#         d1 = self.side1(hx1d)
 
-        d2 = self.side2(hx2d)
-        d2 = _upsample_like(d2, d1)
+#         d2 = self.side2(hx2d)
+#         d2 = _upsample_like(d2, d1)
 
-        d3 = self.side3(hx3d)
-        d3 = _upsample_like(d3, d1)
+#         d3 = self.side3(hx3d)
+#         d3 = _upsample_like(d3, d1)
 
-        d4 = self.side4(hx4d)
-        d4 = _upsample_like(d4, d1)
+#         d4 = self.side4(hx4d)
+#         d4 = _upsample_like(d4, d1)
 
-        d5 = self.side5(hx5d)
-        d5 = _upsample_like(d5, d1)
+#         d5 = self.side5(hx5d)
+#         d5 = _upsample_like(d5, d1)
 
-        d6 = self.side6(hx6)
-        d6 = _upsample_like(d6, d1)
+#         d6 = self.side6(hx6)
+#         d6 = _upsample_like(d6, d1)
 
-        d0 = self.outconv(torch.cat((d1, d2, d3, d4, d5, d6), 1))
+#         d0 = self.outconv(torch.cat((d1, d2, d3, d4, d5, d6), 1))
 
-        return torch.sigmoid(d0), torch.sigmoid(d1), torch.sigmoid(d2), torch.sigmoid(d3), torch.sigmoid(
-            d4), torch.sigmoid(d5), torch.sigmoid(d6)
+#         return torch.sigmoid(d0), torch.sigmoid(d1), torch.sigmoid(d2), torch.sigmoid(d3), torch.sigmoid(
+#             d4), torch.sigmoid(d5), torch.sigmoid(d6)
 
 
 ### U^2-Net small ###
-# 上面的注释是作者加的。即论文中提到的用于识别文档边界的U2 Net。small的意思可能是低配版。
+# 上面的注释是作者加的。即论文中提到的用于识别文档边界的U2-Net。small指的是U2-Net论文中提到的小型网络。
 class U2NETP(nn.Module):
 
     def __init__(self, in_ch=3, out_ch=1):
@@ -557,17 +561,17 @@ class U2NETP(nn.Module):
             d4), torch.sigmoid(d5), torch.sigmoid(d6)
 
 
-def get_parameter_number(net):
-    total_num = sum(p.numel() for p in net.parameters())
-    trainable_num = sum(p.numel() for p in net.parameters() if p.requires_grad)
-    return {'Total': total_num, 'Trainable': trainable_num}
+# def get_parameter_number(net):
+#     total_num = sum(p.numel() for p in net.parameters())
+#     trainable_num = sum(p.numel() for p in net.parameters() if p.requires_grad)
+#     return {'Total': total_num, 'Trainable': trainable_num}
 
-# 下面的代码暗示这个文件可以直接执行。但看样子它并不执行实际操作，而是输出一些网络的参数。
-if __name__ == '__main__':
-    net = U2NET(4, 1).cuda()
-    # 下面这行的代码是作者加的，他居然用了中文！
-    print(get_parameter_number(net))  # 69090500 加attention后69442032
-    with torch.no_grad():
-        inputs = torch.zeros(1, 3, 256, 256).cuda()
-        outs = net(inputs)
-        print(outs[0].shape)  # torch.Size([2, 3, 256, 256]) torch.Size([2, 2, 256, 256])
+# # 下面的代码暗示这个文件可以直接执行。但看样子它并不执行实际操作，而是输出一些网络的参数。
+# if __name__ == '__main__':
+#     net = U2NET(4, 1).cuda()
+#     # 下面这行的代码是作者加的
+#     print(get_parameter_number(net))  # 69090500 加attention后69442032
+#     with torch.no_grad():
+#         inputs = torch.zeros(1, 3, 256, 256).cuda()
+#         outs = net(inputs)
+#         print(outs[0].shape)  # torch.Size([2, 3, 256, 256]) torch.Size([2, 2, 256, 256])

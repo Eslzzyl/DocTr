@@ -32,11 +32,12 @@ class GeoTr_Seg(nn.Module):
         
     def forward(self, x):
         msk, _1,_2,_3,_4,_5,_6 = self.msk(x)    # _1到_6都是无用值，直接丢弃。只需要msk
-        msk = (msk > 0.5).float()
-        x = msk * x
-
+        msk = (msk > 0.5).float()   # 0.5即论文中提到的预处理部分的阈值，见5.2节
+        x = msk * x                 # 矩阵乘法，去除边界
+        # 此时x 1*3*288*288（实测结果）
         bm = self.GeoTr(x)
-        bm = (2 * (bm / 286.8) - 1) * 0.99
+        bm = (2 * (bm / 286.8) - 1) * 0.99  #见https://github.com/fh2019ustc/DocTr/issues/6
+        #此时bm 1*2*288*288（实测结果）
         
         return bm
         
@@ -97,9 +98,10 @@ def rec(opt):
     
     # To eval mode
     # 不启用 Batch Normalization 和 Dropout，注意和python内置的eval不是同一个东西
+    # 这是PyTorch的常见写法
     GeoTr_Seg_model.eval()
     IllTr_model.eval()
-  
+
     # 程序主循环，逐个处理扭曲图像
     for img_path in img_list:
         name = img_path.split('.')[-2]  # 去掉图片文件的后缀名。[-2]是反向索引。
@@ -143,6 +145,7 @@ def rec(opt):
             bm = GeoTr_Seg_model(im.cuda())
 
             bm = bm.cpu()   # 剩下的后处理在 CPU 进行
+            # 此时bm 1*2*288*288（实测结果）
             bm0 = cv2.resize(bm[0, 0].numpy(), (w, h))  # x flow
             bm1 = cv2.resize(bm[0, 1].numpy(), (w, h))  # y flow
             bm0 = cv2.blur(bm0, (3, 3))

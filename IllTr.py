@@ -3,7 +3,7 @@
 '''
 import torch
 import torch.nn as nn
-# 下面这行似乎没有用到，我把它注释起来
+# 下面这行没有用到，我把它注释起来
 # from torch.functional import Tensor
 from torch.nn.modules.activation import Tanhshrink
 from timm.models.layers import trunc_normal_
@@ -282,8 +282,6 @@ class IllTr_Net(nn.Module):
 # 这个函数返回光照修复模型。上游的控制算法从这个函数取得模型
 def IllTr(**kwargs):
     # 这里有一些预设的参数
-    model = IllTr_Net(
+    return IllTr_Net(
         patch_size=4, depth=6, num_heads=8, ffn_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),
         **kwargs)
-
-    return model

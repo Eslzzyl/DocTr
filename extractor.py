@@ -1,7 +1,8 @@
 # 下面这行没有用到
 # import torch
 import torch.nn as nn
-import torch.nn.functional as F
+# 下面这行没有用到
+# import torch.nn.functional as F
 
 # 残差块
 class ResidualBlock(nn.Module):
@@ -54,11 +55,11 @@ class ResidualBlock(nn.Module):
         if self.downsample is not None:
             x = self.downsample(x)
 
-        return self.relu(x+y)
+        return self.relu(x+y)   #残差连接
 
 
 class BasicEncoder(nn.Module):
-    def __init__(self, output_dim=128, norm_fn='batch'):
+    def __init__(self, output_dim=128, norm_fn='batch'):    # 本项目GeoTr使用的norm_fn是'instance'
         super(BasicEncoder, self).__init__()
         self.norm_fn = norm_fn
 
